@@ -1,0 +1,949 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>flow</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+        
+        .font-display {
+            font-family: 'Space Grotesk', sans-serif;
+        }
+
+        .task-item {
+            transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+        }
+
+        .task-item:hover {
+            transform: translateX(4px);
+        }
+
+        .completed {
+            text-decoration: line-through;
+            opacity: 0.6;
+        }
+
+        #confetti-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        .tab-active {
+            border-bottom: 3px solid black;
+            font-weight: 600;
+        }
+
+        .history-date {
+            font-size: 11px;
+            letter-spacing: 0.05em;
+        }
+
+        .streak-badge {
+            background: linear-gradient(45deg, #f59e0b, #fbbf24);
+        }
+
+        .chart-bar {
+            transition: height 0.3s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-zinc-50">
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <div class="w-72 bg-white border-r border-zinc-100 flex flex-col">
+            <div class="p-6 flex items-center gap-x-2">
+                <div class="w-7 h-7 bg-black rounded flex items-center justify-center">
+                    <span class="text-white text-xs font-mono font-bold">f</span>
+                </div>
+                <div class="font-display font-semibold tracking-tighter text-xl">flow</div>
+            </div>
+
+            <div class="px-4 mt-4">
+                <div class="bg-zinc-50 rounded-2xl p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="text-xs text-zinc-500 font-medium">TOTAL POINTS</div>
+                        <div id="points" class="font-display text-2xl font-semibold tracking-tighter">0</div>
+                    </div>
+                    
+                    <div class="flex items-center gap-3 bg-white rounded-xl px-3 py-2.5">
+                        <div id="streak" class="streak-badge w-9 h-9 rounded-xl flex items-center justify-center text-xl font-display font-bold text-amber-950">0</div>
+                        <div>
+                            <div class="text-[10px] text-amber-800 font-medium">CURRENT STREAK</div>
+                            <div id="streak-text" class="font-medium text-sm">no flow yet</div>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 grid grid-cols-2 gap-2">
+                        <div class="bg-white rounded-xl p-2">
+                            <div class="text-[10px] text-zinc-500">LONGEST</div>
+                            <div id="longest-streak" class="font-semibold text-lg">0</div>
+                        </div>
+                        <div class="bg-white rounded-xl p-2">
+                            <div class="text-[10px] text-zinc-500">TODAY</div>
+                            <div id="today-tasks" class="font-semibold text-lg">0/0</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-1 flex flex-col justify-end px-4 pb-6">
+                <div class="bg-black rounded-3xl p-5 text-white">
+                    <div class="flex items-center gap-2 mb-4">
+                        <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                        <div class="text-xs uppercase tracking-[0.1em] font-mono font-medium">LEVEL 1</div>
+                    </div>
+                    <div class="font-display text-xl font-semibold tracking-tighter">momentum builder</div>
+                    <div class="text-white/60 text-sm mt-1 leading-snug">
+                        complete 5 tasks today to unlock the next level
+                    </div>
+                    
+                    <div class="mt-4 h-1 bg-white/10 rounded-full overflow-hidden">
+                        <div id="level-bar" class="h-full bg-white w-1/5 rounded-full"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main -->
+        <div class="flex-1 flex flex-col">
+            <!-- Header -->
+            <div class="border-b border-zinc-100 bg-white px-8 py-5 flex items-center justify-between">
+                <div class="flex items-center gap-x-8">
+                    <div onclick="switchTab('inbox')" class="tab cursor-pointer tab-active" id="tab-inbox">inbox</div>
+                    <div onclick="switchTab('history')" class="tab cursor-pointer" id="tab-history">history</div>
+                    <div onclick="switchTab('dashboard')" class="tab cursor-pointer" id="tab-dashboard">dashboard</div>
+                </div>
+
+                <div class="flex items-center gap-x-4">
+                    <div class="flex items-center gap-x-1.5 bg-zinc-100 rounded-full px-3 py-1">
+                        <div class="text-xs text-zinc-500">daily goal</div>
+                        <div id="daily-goal" class="font-semibold text-sm">3/5</div>
+                    </div>
+
+                    <div class="w-8 h-8 bg-zinc-100 rounded-2xl flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 6v6l4 2"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Content -->
+            <div class="flex-1 overflow-auto">
+                <!-- INBOX -->
+                <div id="view-inbox" class="p-8">
+                    <div class="max-w-xl mx-auto">
+                        <div class="flex gap-3 mb-8">
+                            <input type="text" id="task-input" 
+                                   class="flex-1 bg-white rounded-2xl px-5 py-4 focus:outline-none border border-transparent focus:border-black transition-colors text-lg placeholder-zinc-400"
+                                   placeholder="what needs to flow today?">
+                            <button onclick="addTask()" 
+                                    class="bg-black text-white rounded-2xl px-6 font-medium text-sm tracking-wider uppercase">
+                                ADD
+                            </button>
+                        </div>
+
+                        <div id="task-list" class="space-y-2"></div>
+
+                        <div class="mt-12 pt-6 border-t border-dashed">
+                            <div class="text-xs text-zinc-400 uppercase tracking-widest font-mono mb-2">COMPLETED TODAY</div>
+                            <div id="completed-today" class="space-y-2"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- HISTORY -->
+                <div id="view-history" class="hidden p-8">
+                    <div class="max-w-2xl mx-auto">
+                        <div class="mb-6 flex items-center justify-between">
+                            <div class="font-medium">Task archive</div>
+                            <div class="text-sm text-zinc-400" id="total-completed">0 tasks completed</div>
+                        </div>
+                        
+                        <div id="history-list" class="space-y-8"></div>
+                    </div>
+                </div>
+
+                <!-- DASHBOARD -->
+                <div id="view-dashboard" class="hidden p-8">
+                    <div class="max-w-4xl mx-auto">
+                        <div class="mb-10">
+                            <div class="uppercase text-xs tracking-[0.2em] font-mono text-zinc-400 mb-1">OVERVIEW</div>
+                            <div class="grid grid-cols-4 gap-4">
+                                <div class="bg-white rounded-3xl p-6">
+                                    <div class="text-zinc-400 text-xs font-medium">TOTAL TASKS</div>
+                                    <div id="dash-total-tasks" class="font-display text-5xl font-semibold tracking-tighter mt-1">0</div>
+                                </div>
+                                <div class="bg-white rounded-3xl p-6">
+                                    <div class="text-zinc-400 text-xs font-medium">COMPLETED</div>
+                                    <div id="dash-completed" class="font-display text-5xl font-semibold tracking-tighter mt-1">0</div>
+                                </div>
+                                <div class="bg-white rounded-3xl p-6">
+                                    <div class="text-zinc-400 text-xs font-medium">POINTS</div>
+                                    <div id="dash-points" class="font-display text-5xl font-semibold tracking-tighter mt-1">0</div>
+                                </div>
+                                <div class="bg-white rounded-3xl p-6">
+                                    <div class="text-zinc-400 text-xs font-medium">AVG/DAY</div>
+                                    <div id="dash-avg" class="font-display text-5xl font-semibold tracking-tighter mt-1">0</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-10">
+                            <div class="uppercase text-xs tracking-[0.2em] font-mono text-zinc-400 mb-3">THIS WEEK</div>
+                            <div class="bg-white rounded-3xl p-8">
+                                <div id="week-chart" class="h-48 flex items-end gap-4"></div>
+                                
+                                <div class="flex justify-between mt-3 px-1">
+                                    <div id="chart-labels" class="flex justify-between w-full text-[10px] text-zinc-400 font-mono"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-3xl p-7">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="uppercase text-xs tracking-[0.2em] font-mono text-zinc-400">STATS</div>
+                                <div class="text-xs px-2 py-1 bg-zinc-100 rounded-full">all time</div>
+                            </div>
+                            
+                            <div class="space-y-6">
+                                <div class="flex justify-between">
+                                    <div class="text-zinc-600">Longest streak</div>
+                                    <div class="font-semibold" id="dash-longest">0 days</div>
+                                </div>
+                                
+                                <div class="flex justify-between">
+                                    <div class="text-zinc-600">Completion rate</div>
+                                    <div class="font-semibold" id="dash-rate">0%</div>
+                                </div>
+                                
+                                <div class="flex justify-between">
+                                    <div class="text-zinc-600">Tasks per week</div>
+                                    <div class="font-semibold" id="dash-week-avg">0</div>
+                                </div>
+                                
+                                <div class="pt-4 border-t flex justify-between">
+                                    <div class="text-zinc-600">Points per task</div>
+                                    <div class="font-semibold text-emerald-600">12.4 avg</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom bar -->
+            <div class="border-t border-zinc-100 bg-white px-8 py-4 flex items-center justify-between text-xs text-zinc-400">
+                <div>made with focus • 12 tasks flow today</div>
+                
+                <div class="flex items-center gap-5">
+                    <div class="flex items-center gap-1">
+                        <div class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
+                        98% focus
+                    </div>
+                    <div>ver 001</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confetti canvas -->
+    <canvas id="confetti-canvas" width="800" height="600"></canvas>
+
+    <script>
+        let tasks = []
+        let history = []
+        let points = 0
+        let currentStreak = 0
+        let longestStreak = 0
+        let lastCompletionDate = null
+        let currentTab = 'inbox'
+
+        const taskInput = document.getElementById('task-input')
+        const taskList = document.getElementById('task-list')
+        const completedTodayEl = document.getElementById('completed-today')
+        const historyList = document.getElementById('history-list')
+        const pointsEl = document.getElementById('points')
+        const streakEl = document.getElementById('streak')
+        const streakTextEl = document.getElementById('streak-text')
+        const longestStreakEl = document.getElementById('longest-streak')
+        const todayTasksEl = document.getElementById('today-tasks')
+        const totalCompletedEl = document.getElementById('total-completed')
+        const dailyGoalEl = document.getElementById('daily-goal')
+        const levelBarEl = document.getElementById('level-bar')
+
+        // Dashboard elements
+        const dashTotalTasks = document.getElementById('dash-total-tasks')
+        const dashCompleted = document.getElementById('dash-completed')
+        const dashPoints = document.getElementById('dash-points')
+        const dashAvg = document.getElementById('dash-avg')
+        const dashLongest = document.getElementById('dash-longest')
+        const dashRate = document.getElementById('dash-rate')
+        const dashWeekAvg = document.getElementById('dash-week-avg')
+        const weekChart = document.getElementById('week-chart')
+        const chartLabels = document.getElementById('chart-labels')
+
+        const confettiCanvas = document.getElementById('confetti-canvas')
+        const ctx = confettiCanvas.getContext('2d')
+        let particles = []
+
+        function loadData() {
+            const savedTasks = localStorage.getItem('flow_tasks')
+            if (savedTasks) tasks = JSON.parse(savedTasks)
+
+            const savedHistory = localStorage.getItem('flow_history')
+            if (savedHistory) history = JSON.parse(savedHistory)
+
+            const savedPoints = localStorage.getItem('flow_points')
+            if (savedPoints) points = parseInt(savedPoints)
+
+            const savedStreak = localStorage.getItem('flow_streak')
+            if (savedStreak) {
+                const streakData = JSON.parse(savedStreak)
+                currentStreak = streakData.current || 0
+                longestStreak = streakData.longest || 0
+                lastCompletionDate = streakData.lastDate || null
+            }
+
+            renderAll()
+        }
+
+        function saveData() {
+            localStorage.setItem('flow_tasks', JSON.stringify(tasks))
+            localStorage.setItem('flow_history', JSON.stringify(history))
+            localStorage.setItem('flow_points', points)
+            
+            localStorage.setItem('flow_streak', JSON.stringify({
+                current: currentStreak,
+                longest: longestStreak,
+                lastDate: lastCompletionDate
+            }))
+        }
+
+        function addTask() {
+            const text = taskInput.value.trim()
+            if (!text) return
+
+            const task = {
+                id: Date.now(),
+                text,
+                completed: false,
+                dateAdded: new Date().toISOString()
+            }
+
+            tasks.unshift(task)
+            taskInput.value = ''
+            
+            renderTasks()
+            saveData()
+            
+            taskInput.focus()
+        }
+
+        function completeTask(id) {
+            const taskIndex = tasks.findIndex(t => t.id === id)
+            if (taskIndex === -1) return
+
+            const task = tasks[taskIndex]
+            task.completed = true
+            task.dateCompleted = new Date().toISOString()
+
+            // Give points
+            const taskPoints = Math.floor(Math.random() * 10) + 10 // 10-19
+            points += taskPoints
+
+            // Move to history
+            history.unshift({
+                ...task,
+                points: taskPoints
+            })
+
+            // Remove from tasks
+            tasks.splice(taskIndex, 1)
+
+            // Update streak
+            updateStreak()
+
+            renderAll()
+            saveData()
+
+            triggerConfetti()
+        }
+
+        function deleteTask(id, fromHistory = false) {
+            if (fromHistory) {
+                const index = history.findIndex(t => t.id === id)
+                if (index !== -1) {
+                    const deletedPoints = history[index].points || 10
+                    points = Math.max(0, points - deletedPoints)
+                    history.splice(index, 1)
+                }
+            } else {
+                const index = tasks.findIndex(t => t.id === id)
+                if (index !== -1) tasks.splice(index, 1)
+            }
+
+            renderAll()
+            saveData()
+        }
+
+        function updateStreak() {
+            const today = new Date().toDateString()
+            
+            if (!lastCompletionDate) {
+                // First ever completion
+                currentStreak = 1
+                lastCompletionDate = today
+            } else {
+                const lastDate = new Date(lastCompletionDate)
+                const todayDate = new Date()
+                
+                const dayDiff = Math.floor((todayDate - lastDate) / (1000 * 60 * 60 * 24))
+                
+                if (dayDiff === 0) {
+                    // Same day, streak doesn't increase
+                } else if (dayDiff === 1) {
+                    currentStreak++
+                } else {
+                    currentStreak = 1
+                }
+                
+                lastCompletionDate = today
+            }
+
+            if (currentStreak > longestStreak) {
+                longestStreak = currentStreak
+            }
+        }
+
+        function getTodayString() {
+            return new Date().toDateString()
+        }
+
+        function getTasksCompletedToday() {
+            const today = getTodayString()
+            return history.filter(t => {
+                if (!t.dateCompleted) return false
+                return new Date(t.dateCompleted).toDateString() === today
+            }).length
+        }
+
+        function getPendingToday() {
+            return tasks.length
+        }
+
+        function groupHistoryByDate() {
+            const groups = {}
+            
+            history.forEach(task => {
+                if (!task.dateCompleted) return
+                
+                const date = new Date(task.dateCompleted)
+                const dateStr = date.toLocaleDateString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric',
+                    year: 'numeric'
+                })
+                
+                if (!groups[dateStr]) {
+                    groups[dateStr] = []
+                }
+                
+                groups[dateStr].push(task)
+            })
+            
+            // Sort dates descending
+            return Object.entries(groups).sort((a, b) => {
+                return new Date(b[0]) - new Date(a[0])
+            })
+        }
+
+        function renderTasks() {
+            taskList.innerHTML = ''
+            
+            if (tasks.length === 0) {
+                const empty = document.createElement('div')
+                empty.className = 'bg-white rounded-3xl py-16 px-10'
+                empty.innerHTML = `
+                    <div class="mx-auto w-16 h-16 bg-zinc-50 rounded-2xl flex items-center justify-center mb-4">
+                        <span class="text-3xl">🌊</span>
+                    </div>
+                    <div class="text-zinc-400 text-sm text-center font-medium tracking-wide">YOUR INBOX IS CLEAR</div>
+                    <div class="text-zinc-300 text-xs mt-1 text-center">add something to flow</div>
+                `
+                taskList.appendChild(empty)
+                return
+            }
+            
+            tasks.forEach(task => {
+                const el = document.createElement('div')
+                el.className = 'task-item bg-white rounded-2xl flex items-center gap-4 group px-4 py-3.5'
+                
+                el.innerHTML = `
+                    <div onclick="completeTask(${task.id})" class="w-6 h-6 rounded-xl border-2 border-zinc-200 flex-shrink-0 cursor-pointer hover:border-black transition-colors"></div>
+                    
+                    <div class="flex-1">
+                        <div class="text-[15px]">${task.text}</div>
+                        <div class="text-[10px] text-zinc-400 font-mono mt-px">added just now</div>
+                    </div>
+                    
+                    <div onclick="deleteTask(${task.id})" class="opacity-0 group-hover:opacity-100 text-zinc-300 hover:text-red-500 cursor-pointer transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <path d="M18 6L6 18"/>
+                            <path d="M6 6l12 12"/>
+                        </svg>
+                    </div>
+                `
+                
+                taskList.appendChild(el)
+            })
+        }
+
+        function renderCompletedToday() {
+            completedTodayEl.innerHTML = ''
+            
+            const todayCompletions = history.filter(t => {
+                if (!t.dateCompleted) return false
+                return new Date(t.dateCompleted).toDateString() === getTodayString()
+            }).slice(0, 5) // Limit to recent 5
+
+            if (todayCompletions.length === 0) {
+                const el = document.createElement('div')
+                el.className = 'text-[11px] text-zinc-400 pl-1 py-2'
+                el.textContent = 'no completions today'
+                completedTodayEl.appendChild(el)
+                return
+            }
+
+            todayCompletions.forEach(task => {
+                const el = document.createElement('div')
+                el.className = 'flex items-center gap-4 bg-white rounded-2xl px-4 py-3'
+                
+                el.innerHTML = `
+                    <div class="w-6 h-6 bg-emerald-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                        <span class="text-emerald-500 text-lg scale-90">✓</span>
+                    </div>
+                    
+                    <div class="flex-1">
+                        <div class="text-sm line-through">${task.text}</div>
+                        <div class="text-emerald-600 text-xs font-medium font-mono tracking-tighter">+${task.points}pts</div>
+                    </div>
+                    
+                    <div class="text-[11px] text-emerald-700/60 font-mono">just now</div>
+                `
+                
+                completedTodayEl.appendChild(el)
+            })
+            
+            if (todayCompletions.length < history.filter(t => new Date(t.dateCompleted).toDateString() === getTodayString()).length) {
+                const more = document.createElement('div')
+                more.className = 'text-[11px] pl-10 text-zinc-400 pt-1'
+                more.textContent = '...and more'
+                completedTodayEl.appendChild(more)
+            }
+        }
+
+        function renderHistory() {
+            historyList.innerHTML = ''
+            
+            const grouped = groupHistoryByDate()
+            
+            if (grouped.length === 0) {
+                const empty = document.createElement('div')
+                empty.className = 'bg-zinc-50 rounded-3xl py-16'
+                empty.innerHTML = `
+                    <div class="max-w-[220px] mx-auto text-center">
+                        <div class="text-4xl mb-4">📂</div>
+                        <div class="font-medium text-zinc-500">NOTHING IN THE ARCHIVE YET</div>
+                        <div class="text-xs text-zinc-400 mt-2 leading-snug">completed tasks will collect here as you get things flowing</div>
+                    </div>
+                `
+                historyList.appendChild(empty)
+                return
+            }
+            
+            totalCompletedEl.textContent = `${history.length} tasks completed`
+            
+            grouped.forEach(([dateStr, items]) => {
+                const dateEl = document.createElement('div')
+                
+                let html = `
+                    <div class="flex items-baseline mb-4">
+                        <div class="font-display text-xl font-semibold tracking-[-0.02em]">${dateStr}</div>
+                        <div class="text-xs text-zinc-400 ml-2 font-mono history-date">(${items.length})</div>
+                    </div>
+                    
+                    <div class="space-y-px">
+                `
+                
+                items.forEach(task => {
+                    html += `
+                        <div class="flex items-center group bg-zinc-50 rounded-2xl pl-5 pr-3 py-[14px] hover:bg-white transition-colors">
+                            <div class="flex-1">
+                                <div class="text-sm line-through">${task.text}</div>
+                                <div class="flex items-center gap-3 mt-px">
+                                    <div class="text-emerald-600 text-xs font-semibold font-mono tracking-tighter">+${task.points}pts</div>
+                                    <div class="text-[10px] text-zinc-400 font-mono">${new Date(task.dateCompleted).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                                </div>
+                            </div>
+                            
+                            <div onclick="deleteTask(${task.id}, true)" class="opacity-0 group-hover:opacity-100 cursor-pointer w-6 h-6 flex items-center justify-center hover:bg-red-50 rounded-lg transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                    <path d="M18 6L6 18M6 6l12 12"/>
+                                </svg>
+                            </div>
+                        </div>
+                    `
+                })
+                
+                html += '</div>'
+                
+                dateEl.innerHTML = html
+                historyList.appendChild(dateEl)
+            })
+        }
+
+        function renderDashboard() {
+            const totalTasks = tasks.length + history.length
+            dashTotalTasks.textContent = totalTasks
+            dashCompleted.textContent = history.length
+            dashPoints.textContent = points.toLocaleString()
+            
+            const avg = history.length > 0 ? Math.round(points / history.length) : 0
+            dashAvg.textContent = avg
+
+            dashLongest.textContent = `${longestStreak} days`
+            
+            const completionRate = totalTasks > 0 ? Math.round((history.length / totalTasks) * 100) : 0
+            dashRate.textContent = `${completionRate}%`
+            
+            // Week avg
+            const lastWeekCompletions = getLastWeekCompletionCounts()
+            const sum = lastWeekCompletions.reduce((acc, val) => acc + val, 0)
+            dashWeekAvg.textContent = Math.round(sum / 7)
+
+            renderWeekChart(lastWeekCompletions)
+        }
+
+        function getLastWeekCompletionCounts() {
+            const counts = Array(7).fill(0)
+            const now = new Date()
+            
+            history.forEach(task => {
+                if (!task.dateCompleted) return
+                
+                const completedDate = new Date(task.dateCompleted)
+                const diffDays = Math.floor((now - completedDate) / (1000 * 60 * 60 * 24))
+                
+                if (diffDays >= 0 && diffDays < 7) {
+                    counts[6 - diffDays]++
+                }
+            })
+            
+            return counts
+        }
+
+        function getDayLabel(index) {
+            const days = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+            return days[index]
+        }
+
+        function renderWeekChart(counts) {
+            weekChart.innerHTML = ''
+            chartLabels.innerHTML = ''
+            
+            const max = Math.max(...counts, 1)
+            
+            counts.forEach((count, index) => {
+                const heightPercent = Math.round((count / max) * 100)
+                
+                const bar = document.createElement('div')
+                bar.className = 'flex-1 flex flex-col items-center justify-end gap-1'
+                
+                let barHtml = `
+                    <div class="text-xs font-mono font-bold text-emerald-700 tracking-tighter leading-none mb-px">${count}</div>
+                    
+                    <div class="bg-zinc-100 rounded-t w-7 transition-all chart-bar" 
+                         style="height: ${heightPercent + 8}px">
+                        <div class="bg-gradient-to-t from-emerald-500 to-emerald-400 h-full rounded-t w-full"></div>
+                    </div>
+                    
+                    <div class="text-[11px] font-mono text-zinc-500 mt-1">${getDayLabel(index)}</div>
+                `
+                
+                bar.innerHTML = barHtml
+                weekChart.appendChild(bar)
+                
+                // Labels separate
+                const label = document.createElement('div')
+                label.className = 'flex-1 text-center text-[10px] text-zinc-400 font-mono pt-1'
+                label.textContent = getDayLabel(index)
+                chartLabels.appendChild(label)
+            })
+        }
+
+        function renderStats() {
+            pointsEl.textContent = points.toLocaleString()
+            
+            streakEl.textContent = currentStreak
+            streakEl.className = `w-9 h-9 rounded-xl flex items-center justify-center text-xl font-display font-bold ${currentStreak > 0 ? 'streak-badge text-amber-950' : 'bg-zinc-100 text-zinc-400'}`
+            
+            if (currentStreak === 0) {
+                streakTextEl.textContent = 'no flow yet'
+                streakTextEl.className = 'font-medium text-sm text-zinc-400'
+            } else if (currentStreak === 1) {
+                streakTextEl.textContent = 'just starting'
+                streakTextEl.className = 'font-medium text-sm text-amber-700'
+            } else {
+                streakTextEl.textContent = `${currentStreak} days strong`
+                streakTextEl.className = 'font-semibold text-sm text-amber-700'
+            }
+            
+            longestStreakEl.textContent = longestStreak
+            
+            const completedToday = getTasksCompletedToday()
+            const pendingToday = getPendingToday()
+            todayTasksEl.textContent = `${completedToday}/${completedToday + pendingToday}`
+            
+            // Daily goal
+            const goalProgress = Math.min(Math.round((completedToday / 5) * 100), 100)
+            dailyGoalEl.textContent = `${completedToday}/5`
+            
+            // Level bar
+            levelBarEl.style.width = `${goalProgress}%`
+            
+            if (currentTab === 'dashboard') {
+                renderDashboard()
+            }
+        }
+
+        function renderAll() {
+            renderTasks()
+            renderCompletedToday()
+            renderHistory()
+            renderStats()
+        }
+
+        function switchTab(tab) {
+            currentTab = tab
+            
+            document.getElementById('view-inbox').classList.add('hidden')
+            document.getElementById('view-history').classList.add('hidden')
+            document.getElementById('view-dashboard').classList.add('hidden')
+            
+            document.getElementById(`view-${tab}`).classList.remove('hidden')
+            
+            document.getElementById('tab-inbox').classList.remove('tab-active')
+            document.getElementById('tab-history').classList.remove('tab-active')
+            document.getElementById('tab-dashboard').classList.remove('tab-active')
+            
+            document.getElementById(`tab-${tab}`).classList.add('tab-active')
+            
+            if (tab === 'dashboard') {
+                renderDashboard()
+            }
+            
+            if (tab === 'inbox') {
+                taskInput.focus()
+            }
+        }
+
+        // Confetti
+        class Particle {
+            constructor() {
+                this.x = Math.random() * confettiCanvas.width
+                this.y = Math.random() * confettiCanvas.height - confettiCanvas.height
+                this.size = Math.random() * 5 + 4
+                this.speed = Math.random() * 1.8 + 0.8
+                this.rotation = Math.random() * 360
+                this.rotationSpeed = Math.random() * 8 - 4
+                
+                const colors = ['#fde68a', '#fbbf24', '#f59e0b', '#fef08c', '#fefce8']
+                this.color = colors[Math.floor(Math.random() * colors.length)]
+            }
+            
+            update() {
+                this.y += this.speed
+                this.rotation += this.rotationSpeed
+                
+                if (this.y > confettiCanvas.height) {
+                    this.y = -this.size * 2
+                    this.x = Math.random() * confettiCanvas.width
+                }
+            }
+            
+            draw() {
+                ctx.save()
+                ctx.translate(this.x, this.y)
+                ctx.rotate(this.rotation * Math.PI / 180)
+                
+                ctx.fillStyle = this.color
+                ctx.globalAlpha = 0.85
+                
+                ctx.fillRect(-this.size / 2, -this.size / 2, this.size, this.size)
+                
+                ctx.restore()
+            }
+        }
+
+        function initConfetti() {
+            confettiCanvas.width = window.innerWidth
+            confettiCanvas.height = window.innerHeight
+            
+            for (let i = 0; i < 110; i++) {
+                particles.push(new Particle())
+            }
+        }
+
+        function animateConfetti() {
+            ctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height)
+            
+            particles.forEach(p => {
+                p.update()
+                p.draw()
+            })
+            
+            requestAnimationFrame(animateConfetti)
+        }
+
+        let confettiTimeout
+        function triggerConfetti() {
+            confettiCanvas.style.display = 'block'
+            
+            if (confettiTimeout) clearTimeout(confettiTimeout)
+            
+            confettiTimeout = setTimeout(() => {
+                confettiCanvas.style.display = 'none'
+            }, 2600)
+            
+            if (currentStreak > 2) {
+                // Extra burst
+                for (let i = 0; i < 25; i++) {
+                    const p = new Particle()
+                    p.y = Math.random() * 200 + 80
+                    p.speed = Math.random() * 3 + 2.2
+                    particles.push(p)
+                }
+            }
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && currentTab === 'inbox' && document.activeElement !== taskInput) {
+                taskInput.focus()
+            }
+            
+            if (e.key === 'Escape' && document.activeElement === taskInput) {
+                taskInput.blur()
+            }
+            
+            if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
+                e.preventDefault()
+                switchTab('inbox')
+                taskInput.focus()
+            }
+            
+            if ((e.metaKey || e.ctrlKey) && e.key === 'h') {
+                e.preventDefault()
+                switchTab('history')
+            }
+            
+            if ((e.metaKey || e.ctrlKey) && e.key === 'd') {
+                e.preventDefault()
+                switchTab('dashboard')
+            }
+        })
+
+        // Window resize
+        window.addEventListener('resize', () => {
+            confettiCanvas.width = window.innerWidth
+            confettiCanvas.height = window.innerHeight
+        })
+
+        // Init
+        initConfetti()
+        animateConfetti()
+        loadData()
+        switchTab('inbox')
+
+        // Demo data if empty
+        if (tasks.length === 0 && history.length === 0) {
+            setTimeout(() => {
+                tasks = [
+                    {
+                        id: Date.now() - 1000,
+                        text: "finish the quarterly report",
+                        completed: false,
+                        dateAdded: new Date().toISOString()
+                    },
+                    {
+                        id: Date.now() - 2000,
+                        text: "schedule dentist appointment",
+                        completed: false,
+                        dateAdded: new Date().toISOString()
+                    },
+                    {
+                        id: Date.now() - 3000,
+                        text: "review pull requests",
+                        completed: false,
+                        dateAdded: new Date().toISOString()
+                    }
+                ]
+                
+                renderAll()
+                saveData()
+            }, 300)
+            
+            setTimeout(() => {
+                // Fake some history
+                history = [
+                    {
+                        id: Date.now() - 4000,
+                        text: "morning standup meeting",
+                        completed: true,
+                        dateCompleted: new Date(Date.now() - 86400000 * 3).toISOString(),
+                        points: 12,
+                        dateAdded: new Date().toISOString()
+                    },
+                    {
+                        id: Date.now() - 5000,
+                        text: "finish onboarding docs",
+                        completed: true,
+                        dateCompleted: new Date(Date.now() - 86400000 * 2).toISOString(),
+                        points: 15,
+                        dateAdded: new Date().toISOString()
+                    },
+                    {
+                        id: Date.now() - 6000,
+                        text: "deploy frontend updates",
+                        completed: true,
+                        dateCompleted: new Date(Date.now() - 86400000).toISOString(),
+                        points: 17,
+                        dateAdded: new Date().toISOString()
+                    }
+                ]
+                
+                currentStreak = 3
+                longestStreak = 3
+                lastCompletionDate = new Date(Date.now() - 86400000).toDateString()
+                points = 44
+                
+                renderAll()
+                saveData()
+            }, 800)
+        }
+    </script>
+</body>
+</html>
+```
